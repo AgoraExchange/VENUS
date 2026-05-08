@@ -1,4 +1,4 @@
-const CACHE_NAME = "venus-build-12-v1";
+const CACHE_NAME = "venus-build-17-v1";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,6 +8,7 @@ const ASSETS = [
   "./levels/level1.js",
   "./levels/level2.js",
   "./levels/level3.js",
+  "./levels/level4.js",
   "./manifest.json",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg"

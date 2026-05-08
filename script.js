@@ -2,13 +2,13 @@
   "use strict";
 
   /* ============================================================
-     VENUS - Build 12
+     VENUS - Build 17
      Vanilla JS canvas platformer/PWA base. Everything here is
      data-driven and beginner-readable so you can expand it later.
   ============================================================ */
 
   const SAVE_KEY = "venus_build_08_progression_save";
-  const VERSION = "0.12.0";
+  const VERSION = "0.13.0";
 
   const ITEM_DEFS = {
     smallPotion: {
@@ -79,7 +79,7 @@
 
 
 
-  const LEVEL_ORDER = ["tutorial", "level1", "level2", "level3"];
+  const LEVEL_ORDER = ["tutorial", "level1", "level2", "level3", "level4"];
 
   function levelOrdinal(levelId) {
     const idx = LEVEL_ORDER.indexOf(levelId);
@@ -496,12 +496,51 @@
       if (dom.mobileJoystickKnob) dom.mobileJoystickKnob.style.transform = "translate(0, 0)";
     }
 
+    function pointInsideElement(el, x, y) {
+      if (!el || el.classList?.contains("hidden")) return false;
+      const r = el.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    }
+
+    function touchStartedOnProtectedUI(e) {
+      const t = e.changedTouches && e.changedTouches[0];
+      if (!t) return false;
+      const x = t.clientX;
+      const y = t.clientY;
+
+      // iPhone/Safari can sometimes leak touches through overlay HUD buttons into
+      // the canvas. Guard the button zones by coordinate so the joystick never
+      // steals pause, backpack, hotbar, or action-button taps.
+      const protectedEls = [
+        buttons.pause,
+        buttons.inventory,
+        dom.hotbar,
+        buttons.mobileAttack,
+        buttons.mobileInteract,
+        buttons.mobileUse,
+        buttons.mobileSlide,
+        dom.inventoryModal,
+        dom.pauseMenu,
+        dom.infoModal,
+        dom.levelComplete,
+        dom.gameOver
+      ];
+
+      return protectedEls.some(el => pointInsideElement(el, x, y));
+    }
+
     const api = {
       bind() {
         canvas.addEventListener("touchstart", (e) => {
           unlockMusicFromGesture();
           if (state.screen !== "playing") return;
           if (!e.changedTouches.length) return;
+          if (touchStartedOnProtectedUI(e)) {
+            input.setMobileAxis(0, 0);
+            active = false;
+            hideJoystick();
+            return;
+          }
           const t = e.changedTouches[0];
           startX = t.clientX;
           startY = t.clientY;
@@ -1054,7 +1093,13 @@
 
       if (id === "key") {
         const gates = level.gates || (level.gate ? [level.gate] : []);
-        for (const gate of gates) {
+        // Only try locked gates near the player. Older builds returned true for
+        // already-open gates, so Level 3's first door could accidentally "eat" the
+        // key-use action before the final Apprentice door ever checked it.
+        const nearLockedGates = gates
+          .filter(gate => gate && !gate.open && gate.isNear())
+          .sort((a, b) => Math.abs((a.x + a.w / 2) - (this.x + this.w / 2)) - Math.abs((b.x + b.w / 2) - (this.x + this.w / 2)));
+        for (const gate of nearLockedGates) {
           if (gate.tryUnlockWithKey()) return true;
         }
         this.think("This key probably belongs to a locked door.", 2.5);
@@ -1310,7 +1355,14 @@
       this.phase = rand(0, Math.PI * 2);
       this.loot = opts.loot || opts.lootOnDeath || [];
       this.onDeath = opts.onDeath || null;
+      this.invulnerable = Boolean(opts.invulnerable);
       this.stompTimer = 0;
+      // Apprentice mini-boss physics. Other enemies keep their lightweight patrol/fly logic.
+      this.vy = 0;
+      this.grounded = false;
+      this.jumpCooldown = 0;
+      this.gravity = type === "apprentice" ? 1780 : 0;
+      this.jumpPower = opts.jumpPower || 790;
     }
 
     get rect() {
@@ -1320,6 +1372,8 @@
     update(dt) {
       if (this.dead) return;
       this.hitCooldown = Math.max(0, this.hitCooldown - dt);
+      if (this.type === "apprentice") this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
+
       if (this.behavior === "chase" && player && !player.dead) {
         this.dir = center(player.rect).x < center(this.rect).x ? -1 : 1;
         this.x += this.dir * this.speed * dt;
@@ -1337,9 +1391,13 @@
           this.dir = -1;
         }
       }
+
       if (this.type === "bat") {
         this.y = this.baseY + Math.sin(state.time * 3 + this.phase) * 22;
+      } else if (this.type === "apprentice") {
+        this.updateApprenticePhysics(dt);
       }
+
       if (this.type === "apprentice" && (this.behavior === "chase" || this.behavior === "bossIntro")) {
         this.stompTimer -= dt;
         if (this.stompTimer <= 0) {
@@ -1355,7 +1413,59 @@
       }
     }
 
+    updateApprenticePhysics(dt) {
+      const prevBottom = this.y + this.h;
+
+      // No hiding on the high platforms anymore: if VENUS climbs above him,
+      // the Apprentice gets a heavy jump without changing his chase speed.
+      if (this.behavior === "chase" && player && !player.dead && this.grounded && this.jumpCooldown <= 0) {
+        const dx = Math.abs(center(player.rect).x - center(this.rect).x);
+        const playerIsHigher = player.y + player.h < this.y + this.h - 62;
+        if (playerIsHigher && dx < 560) {
+          this.vy = -this.jumpPower;
+          this.grounded = false;
+          this.jumpCooldown = 1.15;
+          screenShake(9);
+          tinyBeep(72, 0.045);
+        }
+      }
+
+      if (this.behavior !== "idle") {
+        this.vy += this.gravity * dt;
+        this.vy = Math.min(this.vy, 940);
+        this.y += this.vy * dt;
+      }
+
+      this.grounded = false;
+      for (const p of level.platforms) {
+        const fallingOntoTop = this.vy >= 0 && prevBottom <= p.y + 26;
+        if (fallingOntoTop && rectsOverlap(this.rect, p)) {
+          this.y = p.y - this.h;
+          this.vy = 0;
+          this.grounded = true;
+          break;
+        }
+        if (!p.oneWay && rectsOverlap(this.rect, p) && this.vy < 0) {
+          this.y = p.y + p.h;
+          this.vy = 0;
+        }
+      }
+
+      if (this.y > level.worldHeight + 300) {
+        this.y = (level.platforms.find(p => p.y >= 700)?.y || 720) - this.h;
+        this.vy = 0;
+        this.grounded = true;
+      }
+    }
+
     takeDamage(amount, direction) {
+      if (this.invulnerable) {
+        this.hitCooldown = 0.12;
+        floatingTexts.push(new FloatingText(this.x + this.w / 2, this.y - 12, "IMMUNE", COLORS.gold));
+        spawnParticles(this.x + this.w / 2, this.y + this.h / 2, 8, COLORS.gold, 0.25);
+        tinyBeep(95, 0.035);
+        return;
+      }
       this.hp -= amount;
       this.hitCooldown = 0.18;
       this.x += direction * 14;
@@ -1376,11 +1486,29 @@
       // Tiny coin drop reward.
       level.collectibles.push(new Collectible(this.x + 10, this.y - 18, "coin"));
       level.collectibles.push(new Collectible(this.x + 34, this.y - 28, "coin"));
-      for (const item of this.loot) {
-        level.collectibles.push(new Collectible(item.x ?? this.x + this.w / 2, item.y ?? this.y - 24, item.type, { ...item, requiresInteract: item.requiresInteract ?? true, ammo: item.ammo }));
-      }
+
       if (this.onDeath === "level3ApprenticeDead") {
+        // Special boss drop: place the key at the Apprentice's exact death spot,
+        // near his feet, so the player can actually see it and press K.
+        const keyX = this.x + this.w / 2 - 13;
+        const keyY = this.y + this.h - 34;
+        level.collectibles.push(new Collectible(keyX, keyY, "key", { x: keyX, y: keyY, requiresInteract: true }));
         level.flags.level3ApprenticeDead = true;
+        player?.think?.("The monster dropped a key!", 2.8);
+        toast("Apprentice Key dropped by the body. Press K near it to pick it up.");
+      } else if (this.onDeath === "level4ApprenticeDead") {
+        const keyX = this.x + this.w / 2 - 13;
+        const keyY = this.y + this.h - 34;
+        level.collectibles.push(new Collectible(keyX, keyY, "key", { x: keyX, y: keyY, requiresInteract: true }));
+        level.flags.level4ApprenticeDead = true;
+        player?.think?.("He dropped the exit key. Grab it and move!", 3);
+        toast("Boss key dropped. Press K near the body to pick it up.");
+      } else {
+        for (const item of this.loot) {
+          const dropX = (item.x == null || (item.x === 0 && item.y === 0)) ? this.x + this.w / 2 - 14 : item.x;
+          const dropY = (item.y == null || (item.x === 0 && item.y === 0)) ? this.y + this.h - 34 : item.y;
+          level.collectibles.push(new Collectible(dropX, dropY, item.type, { ...item, x: dropX, y: dropY, requiresInteract: item.requiresInteract ?? true, ammo: item.ammo }));
+        }
       }
       updateHUD();
     }
@@ -2058,7 +2186,7 @@
     }
 
     tryUnlockWithKey() {
-      if (this.open) return true;
+      if (this.open) return false;
       if (!this.isNear()) return false;
       if ((player.inventory[this.keyId] || 0) <= 0) return false;
       player.inventory[this.keyId]--;
@@ -2196,6 +2324,7 @@
     }
 
     if (level.id === "level3") updateLevel3Scripts(dt);
+    if (level.id === "level4") updateLevel4Scripts(dt);
   }
 
   function startLevel3SupplyWave() {
@@ -2329,7 +2458,7 @@
           dir: -1,
           speed: 95,
           hp: 250,
-          lootOnDeath: [{ type: "key", x: 0, y: 0, requiresInteract: true }],
+          lootOnDeath: [],
           onDeath: "level3ApprenticeDead",
           waveId: "level3Boss"
         });
@@ -2391,6 +2520,315 @@
           if (level.flags) level.flags.cameraFocus = null;
         }
       }, 3000);
+    }
+  }
+
+
+
+  function bossSpeak(enemy, text, duration = 2.2, color = COLORS.danger) {
+    if (!enemy) return;
+    const bubble = new FloatingText(enemy.x + enemy.w / 2, enemy.y - 44, text, color);
+    bubble.life = duration;
+    bubble.maxLife = duration;
+    bubble.vy = -10;
+    floatingTexts.push(bubble);
+  }
+
+  function spawnLevel4Enemy(kind, x, y, opts = {}) {
+    const enemy = new Enemy(x, y, opts.minX ?? x - 900, opts.maxX ?? x + 220, kind, {
+      behavior: opts.behavior || "chase",
+      speed: opts.speed || (kind === "bat" ? 138 : 148),
+      hp: opts.hp || (kind === "bat" ? 55 : 55),
+      dir: opts.dir || -1,
+      waveId: opts.waveId || "level4Wave"
+    });
+    level.enemies.push(enemy);
+    spawnParticles(x + enemy.w / 2, y + enemy.h / 2, 12, kind === "bat" ? COLORS.violet : "#11101a", 0.42);
+    return enemy;
+  }
+
+  function spawnLevel4HelperPlatforms() {
+    if (!level || level.flags.level4PlatformsSpawned) return;
+    level.flags.level4PlatformsSpawned = true;
+    const platforms = level.scripts?.helperPlatforms || [];
+    for (const p of platforms) {
+      const plat = { ...p, oneWay: p.oneWay ?? true, spawnFx: 1.2 };
+      level.platforms.push(plat);
+      spawnParticles(plat.x + plat.w / 2, plat.y + 12, 24, COLORS.cyan, 0.6);
+    }
+    toast("The Apprentice spawned unstable platforms into the arena.");
+  }
+
+  function spawnLevel4SupplyCrate(secondsMode = "survival") {
+    const platforms = (level.scripts?.cratePlatforms || []).length ? level.scripts.cratePlatforms : level.platforms.filter(p => p.oneWay);
+    if (!platforms.length) return;
+    const p = platforms[Math.floor(rand(0, platforms.length))];
+    const roll = Math.random();
+    let loot;
+    if (roll < 0.24) loot = [{ type: "bazooka", ammo: 2, requiresInteract: true, x: p.x + p.w / 2 - 24, y: p.y - 50, autoEquip: true }];
+    else if (roll < 0.49) loot = [{ type: "gun", ammo: 6, requiresInteract: true, x: p.x + p.w / 2 - 20, y: p.y - 44, autoEquip: true }];
+    else if (roll < 0.74) loot = [{ type: "smallPotion", requiresInteract: true, x: p.x + p.w / 2 - 12, y: p.y - 44 }];
+    else loot = [{ type: "largePotion", requiresInteract: true, x: p.x + p.w / 2 - 12, y: p.y - 44 }];
+    const crate = new Crate(p.x + p.w / 2 - 27, p.y - 54, secondsMode === "boss" ? 62 : 52, loot, { spawnFx: 1.4, id: "level4Supply" });
+    level.crates.push(crate);
+    spawnParticles(crate.x + crate.w / 2, crate.y + crate.h / 2, 34, COLORS.cyan, 0.75);
+    toast(secondsMode === "boss" ? "Boss supply crate flashed into the arena." : "Supply crate spawned. Break it fast.");
+  }
+
+  function ensureLevel4Boss() {
+    const flags = level.flags;
+    if (flags.level4BossEnemy && !flags.level4BossEnemy.dead) return flags.level4BossEnemy;
+    const cfg = level.scripts?.boss || {};
+    const boss = new Enemy(cfg.spawnX || 1030, cfg.groundY || 592, 650, 3550, "apprentice", {
+      behavior: "idle",
+      dir: -1,
+      speed: 0,
+      hp: 250,
+      invulnerable: true,
+      waveId: "level4Apprentice"
+    });
+    level.enemies.push(boss);
+    flags.level4BossEnemy = boss;
+    flags.bossFocusTarget = boss;
+    return boss;
+  }
+
+  function updateLevel4Scripts(dt) {
+    const flags = level.flags;
+    const cfg = level.scripts || {};
+
+    if (!flags.level4Started) {
+      flags.level4Started = true;
+      flags.level4Phase = "opening";
+      flags.level4Timer = 0;
+      flags.level4ShakeTimer = 0.05;
+      state.inputLocked = true;
+      state.cinematicZoom = 1.12;
+      level.flags.cameraFocus = "player";
+      player.vx = 0;
+      player.think("I recognize that sound..", 2.5);
+      screenShake(18);
+      toast("Boss Round: The Apprentice returns.");
+    }
+
+    const boss = flags.level4BossEnemy || ensureLevel4Boss();
+
+    if (flags.level4Phase === "opening") {
+      flags.level4Timer += dt;
+      flags.level4ShakeTimer -= dt;
+      if (flags.level4ShakeTimer <= 0) {
+        flags.level4ShakeTimer = 0.55;
+        screenShake(13);
+        tinyBeep(54, 0.045);
+      }
+      if (!flags.level4SawBoss && flags.level4Timer >= 2.0) {
+        flags.level4SawBoss = true;
+        boss.x = cfg.boss?.spawnX || 1040;
+        boss.y = cfg.boss?.groundY || 592;
+        level.flags.cameraFocus = "boss";
+        flags.bossFocusTarget = boss;
+        state.cinematicZoom = 1.25;
+        bossSpeak(boss, "You thought i was dead? HA!", 2.2);
+        screenShake(16);
+      }
+      if (!flags.level4BossEntry && flags.level4Timer >= 4.4) {
+        flags.level4BossEntry = true;
+        level.flags.cameraFocus = "player";
+        state.cinematicZoom = 1.08;
+        boss.behavior = "bossIntro";
+        boss.speed = 68;
+        boss.dir = -1;
+        boss.x = Math.max(camera.x + state.width + 90, cfg.boss?.spawnX || 1040);
+        boss.y = cfg.boss?.groundY || 592;
+      }
+      if (!flags.level4SlimeSpeech && flags.level4Timer >= 6.8) {
+        flags.level4SlimeSpeech = true;
+        boss.behavior = "idle";
+        boss.speed = 0;
+        level.flags.cameraFocus = "boss";
+        flags.bossFocusTarget = boss;
+        state.cinematicZoom = 1.25;
+        bossSpeak(boss, "Lets see how you do against my slimes!", 2.6);
+        screenShake(14);
+      }
+      if (flags.level4Timer >= 9.2) {
+        const watch = cfg.bossWatch || { x: 1030, y: 392 };
+        boss.x = watch.x;
+        boss.y = watch.y;
+        boss.vx = 0;
+        boss.vy = 0;
+        boss.behavior = "idle";
+        boss.speed = 0;
+        boss.invulnerable = true;
+        level.flags.cameraFocus = null;
+        state.cinematicZoom = 1;
+        state.inputLocked = false;
+        flags.level4Phase = "slimeTrial";
+        flags.level4SpawnedSlimes = 0;
+        flags.level4SlimeSpawnTimer = 0.1;
+        flags.level4ResurrectTimer = 0;
+        toast("Slime trial started.");
+      }
+      return;
+    }
+
+    if (flags.level4Phase === "slimeTrial") {
+      flags.level4SlimeSpawnTimer -= dt;
+      if ((flags.level4SpawnedSlimes || 0) < 4 && flags.level4SlimeSpawnTimer <= 0) {
+        const spawnX = camera.x + state.width + 140;
+        spawnLevel4Enemy("slime", spawnX, cfg.slimeY || 682, { waveId: "level4SlimeTrial", minX: 120, maxX: 1820, speed: 142, hp: 55 });
+        flags.level4SpawnedSlimes++;
+        flags.level4SlimeSpawnTimer = 0.6;
+      }
+      const deadSlimes = level.enemies.filter(e => e.waveId === "level4SlimeTrial" && e.type === "slime" && e.dead).length;
+      if (!flags.level4ResurrectLine && deadSlimes >= 1) {
+        flags.level4ResurrectLine = true;
+        flags.level4ResurrectTimer = 2;
+        bossSpeak(boss, "RESSURECT MY SLIME!", 2);
+        screenShake(18);
+      }
+      if (flags.level4ResurrectLine && !flags.level4Resurrected && flags.level4ResurrectTimer > 0) {
+        flags.level4ResurrectTimer -= dt;
+        if (flags.level4ResurrectTimer <= 0) {
+          flags.level4Resurrected = true;
+          const spawnX = camera.x + state.width + 120;
+          spawnLevel4Enemy("slime", spawnX, cfg.slimeY || 682, { waveId: "level4SlimeTrial", minX: 120, maxX: 1820, speed: 155, hp: 65 });
+          toast("A slime was resurrected.");
+        }
+      }
+      const allSpawned = (flags.level4SpawnedSlimes || 0) >= 4 && flags.level4Resurrected;
+      const alive = level.enemies.some(e => e.waveId === "level4SlimeTrial" && !e.dead);
+      if (allSpawned && !alive) {
+        flags.level4Phase = "survivalIntro";
+        flags.level4Timer = 0;
+        state.inputLocked = true;
+        level.flags.cameraFocus = "boss";
+        flags.bossFocusTarget = boss;
+        state.cinematicZoom = 1.25;
+        bossSpeak(boss, "What?! How. Alright how bout this..", 2.2);
+        screenShake(12);
+      }
+      return;
+    }
+
+    if (flags.level4Phase === "survivalIntro") {
+      flags.level4Timer += dt;
+      if (!flags.level4GiftSpeech && flags.level4Timer >= 2.2) {
+        flags.level4GiftSpeech = true;
+        bossSpeak(boss, "Use only what i give you to help you.", 2.4);
+        spawnLevel4HelperPlatforms();
+        screenShake(10);
+      }
+      if (flags.level4Timer >= 4.8) {
+        flags.level4Phase = "survival";
+        flags.level4SurvivalTime = cfg.survivalSeconds || 60;
+        flags.level4SurvivalElapsed = 0;
+        flags.level4WaveSpawned = false;
+        flags.level4CrateTimer = 2;
+        flags.level4RespawnedSlimes = 0;
+        state.inputLocked = false;
+        state.cinematicZoom = 1;
+        level.flags.cameraFocus = null;
+        toast("Survive the Apprentice's arena for 60 seconds.");
+      }
+      return;
+    }
+
+    if (flags.level4Phase === "survival") {
+      flags.level4SurvivalElapsed += dt;
+      if (!flags.level4WaveSpawned) {
+        flags.level4WaveSpawned = true;
+        for (let i = 0; i < 4; i++) {
+          spawnLevel4Enemy("bat", camera.x + state.width + 130 + i * 70, (cfg.batY || 510) + (i % 2) * 34, { waveId: "level4Survival", minX: 220, maxX: 2660, speed: 132 + i * 8, hp: 55 });
+        }
+        for (let i = 0; i < 2; i++) {
+          spawnLevel4Enemy("slime", camera.x + state.width + 240 + i * 110, cfg.slimeY || 682, { waveId: "level4Survival", minX: 120, maxX: 2740, speed: 150, hp: 65 });
+        }
+      }
+      const deadSurvivalSlimes = level.enemies.filter(e => e.waveId === "level4Survival" && e.type === "slime" && e.dead).length;
+      while ((flags.level4RespawnedSlimes || 0) < deadSurvivalSlimes && flags.level4SurvivalElapsed < flags.level4SurvivalTime) {
+        flags.level4RespawnedSlimes++;
+        spawnLevel4Enemy("slime", camera.x + state.width + 170, cfg.slimeY || 682, { waveId: "level4Survival", minX: 120, maxX: 2760, speed: 158, hp: 65 });
+        bossSpeak(boss, "More.", 1.1);
+      }
+      flags.level4CrateTimer -= dt;
+      if (flags.level4CrateTimer <= 0) {
+        spawnLevel4SupplyCrate("survival");
+        flags.level4CrateTimer = 10;
+      }
+      if (flags.level4SurvivalElapsed >= flags.level4SurvivalTime) {
+        for (const enemy of level.enemies) {
+          if (enemy.waveId === "level4Survival" && !enemy.dead) {
+            enemy.dead = true;
+            spawnParticles(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 14, enemy.type === "bat" ? COLORS.violet : "#11101a", 0.42);
+          }
+        }
+        flags.level4Phase = "bossFightIntro";
+        flags.level4Timer = 0;
+        state.inputLocked = true;
+        level.flags.cameraFocus = "boss";
+        flags.bossFocusTarget = boss;
+        state.cinematicZoom = 1.22;
+        boss.x = cfg.boss?.fightX || 2720;
+        boss.y = cfg.boss?.groundY || 592;
+        boss.vy = 0;
+        boss.behavior = "idle";
+        boss.speed = 0;
+        boss.invulnerable = true;
+        bossSpeak(boss, "I hope your ready to die!", 2.5);
+        screenShake(20);
+      }
+      return;
+    }
+
+    if (flags.level4Phase === "bossFightIntro") {
+      flags.level4Timer += dt;
+      screenShake(5);
+      if (flags.level4Timer >= 2.6) {
+        boss.invulnerable = false;
+        boss.dead = false;
+        boss.hp = 500;
+        boss.maxHP = 500;
+        boss.behavior = "chase";
+        boss.speed = 72;
+        boss.dir = -1;
+        boss.minX = 120;
+        boss.maxX = 3700;
+        boss.onDeath = "level4ApprenticeDead";
+        boss.waveId = "level4BossFight";
+        flags.level4Phase = "bossFight";
+        flags.level4BossCrateTimer = 4;
+        state.inputLocked = false;
+        state.cinematicZoom = 1;
+        level.flags.cameraFocus = null;
+        toast("Final Apprentice fight: 500 HP. No escaping.");
+      }
+      return;
+    }
+
+    if (flags.level4Phase === "bossFight" && !flags.level4ApprenticeDead) {
+      flags.level4BossCrateTimer -= dt;
+      if (flags.level4BossCrateTimer <= 0) {
+        spawnLevel4SupplyCrate("boss");
+        flags.level4BossCrateTimer = 15;
+      }
+      return;
+    }
+
+    if (flags.level4ApprenticeDead && !flags.level4WinLine) {
+      flags.level4WinLine = true;
+      flags.level4Phase = "exit";
+      state.inputLocked = true;
+      state.cinematicZoom = 1.14;
+      level.flags.cameraFocus = "player";
+      player.think("He is finally down. Grab the key.", 3);
+      setTimeout(() => {
+        if (level?.id === "level4") {
+          state.inputLocked = false;
+          state.cinematicZoom = 1;
+          if (level.flags) level.flags.cameraFocus = null;
+        }
+      }, 2200);
     }
   }
 
@@ -2638,7 +3076,7 @@
       <p><strong>Mobile Controls</strong></p>
       <p>Touch/small screens now use a virtual joystick feel. Drag anywhere on the game view left/right to move, swipe/drag up to jump, swipe/drag down to drop through green platforms or slide, tap the canvas to attack, and use the on-screen K button to interact with chests, trap doors, and loot. Use ✚/Q to use the held item. The selected item is visibly held by VENUS.</p>
     `;
-    showInfo("Controls", desktop + mobile + `<p class="muted">Pro tip: Build 12 keeps each map in separate /levels files. Tutorial, Level 1, Level 2, and Level 3 load through LEVEL_ORDER. Keys/tools use Q/I, weapons attack with Space, loot uses K, and Level 2 now has hidden trapdoor/objective scripting.</p>`);
+    showInfo("Controls", desktop + mobile + `<p class="muted">Pro tip: Build 16 keeps each map in separate /levels files. Tutorial, Level 1, Level 2, and Level 3 load through LEVEL_ORDER. Keys/tools use Q/I, weapons attack with Space, loot uses K, and Level 2 now has hidden trapdoor/objective scripting.</p>`);
   }
 
   function showSettings() {
@@ -2844,7 +3282,10 @@
   function updateCamera(dt) {
     const lead = state.mobileMode ? state.width * 0.34 : state.width * 0.28;
     let focus = player;
-    if (level?.flags?.cameraFocus === "boss" && level.flags.level3BossEnemy && !level.flags.level3BossEnemy.dead) focus = level.flags.level3BossEnemy;
+    if (level?.flags?.cameraFocus === "boss") {
+      const bossTarget = level.flags.bossFocusTarget || level.flags.level4BossEnemy || level.flags.level3BossEnemy;
+      if (bossTarget && !bossTarget.dead) focus = bossTarget;
+    }
     camera.targetX = clamp(focus.x - lead, 0, Math.max(0, level.worldWidth - state.width));
     camera.targetY = clamp(focus.y - state.height * 0.55, 0, Math.max(0, level.worldHeight - state.height));
     const smooth = 1 - Math.pow(0.0002, dt);
@@ -3388,6 +3829,80 @@
     requestAnimationFrame(gameLoop);
   }
 
+  function eventPointInside(el, e) {
+    if (!el || el.classList?.contains("hidden")) return false;
+    const point = e.changedTouches?.[0] || e.touches?.[0] || e;
+    if (point.clientX == null || point.clientY == null) return false;
+    const r = el.getBoundingClientRect();
+    return point.clientX >= r.left && point.clientX <= r.right && point.clientY >= r.top && point.clientY <= r.bottom;
+  }
+
+  function bindInstantTouchButton(el, action) {
+    if (!el) return;
+    let lastTouchRun = 0;
+    const run = (e) => {
+      const now = performance.now();
+      if (now - lastTouchRun < 90) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      lastTouchRun = now;
+      unlockMusicFromGesture();
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+      action(e);
+    };
+    el.addEventListener("touchstart", run, { passive: false });
+    el.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "touch") run(e);
+    }, { passive: false });
+  }
+
+  function bindMobileHudTouchShield() {
+    // Coordinate-based shield for iOS: if the touch lands on an overlay control,
+    // fire that control directly and stop the canvas joystick from activating.
+    document.addEventListener("touchstart", (e) => {
+      if (!state.mobileMode || !e.changedTouches?.length) return;
+      if (state.screen === "playing") {
+        if (eventPointInside(buttons.pause, e)) {
+          e.preventDefault(); e.stopPropagation(); if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation(); togglePause(); return;
+        }
+        if (eventPointInside(buttons.inventory, e)) {
+          e.preventDefault(); e.stopPropagation(); if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation(); toggleInventory(); return;
+        }
+        if (eventPointInside(buttons.mobileAttack, e)) {
+          e.preventDefault(); e.stopPropagation(); if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation(); input.pressAttack(); return;
+        }
+        if (eventPointInside(buttons.mobileInteract, e)) {
+          e.preventDefault(); e.stopPropagation(); if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation(); input.pressInteract(); return;
+        }
+        if (eventPointInside(buttons.mobileUse, e)) {
+          e.preventDefault(); e.stopPropagation(); if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation(); player?.useSelectedItem(); return;
+        }
+        if (eventPointInside(buttons.mobileSlide, e)) {
+          e.preventDefault(); e.stopPropagation(); if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+          if (!player?.dropThroughOneWayPlatform?.()) player?.triggerSlide();
+          return;
+        }
+
+        const slots = [...dom.hotbar.querySelectorAll(".hotbar-slot")];
+        for (let i = 0; i < slots.length; i++) {
+          if (eventPointInside(slots[i], e)) {
+            e.preventDefault(); e.stopPropagation(); if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+            if (player) {
+              player.selectedSlot = i;
+              renderHotbar();
+              updateEquippedPill();
+            }
+            return;
+          }
+        }
+      }
+    }, { capture: true, passive: false });
+  }
+
   function bindButtons() {
     buttons.start.addEventListener("click", () => startGame(false));
     buttons.continue.addEventListener("click", () => startGame(true));
@@ -3437,6 +3952,16 @@
       if (!player?.dropThroughOneWayPlatform?.()) player?.triggerSlide();
     });
     buttons.mobileInteract?.addEventListener("pointerdown", (e) => { e.preventDefault(); input.pressInteract(); });
+
+    bindInstantTouchButton(buttons.pause, togglePause);
+    bindInstantTouchButton(buttons.inventory, toggleInventory);
+    bindInstantTouchButton(buttons.mobileAttack, () => input.pressAttack());
+    bindInstantTouchButton(buttons.mobileUse, () => player?.useSelectedItem());
+    bindInstantTouchButton(buttons.mobileSlide, () => {
+      if (!player?.dropThroughOneWayPlatform?.()) player?.triggerSlide();
+    });
+    bindInstantTouchButton(buttons.mobileInteract, () => input.pressInteract());
+    bindMobileHudTouchShield();
   }
 
   function registerPWA() {

@@ -78,7 +78,7 @@ window.VENUS_LEVELS.level3 = {
     { x: 5795, y: 602 }, { x: 6075, y: 542 }, { x: 6355, y: 482 }, { x: 6640, y: 445 }, { x: 6745, y: 445 }
   ],
   signs: [
-    { x: 95, y: 668, text: "[Monster Sightings Reported]" },
+    { x: 95, y: 668, text: "As above so below," },
     { x: 3155, y: 668, text: "BEWARE! Monster Territory." }
   ],
   chests: [

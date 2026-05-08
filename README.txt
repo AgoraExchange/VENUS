@@ -1,4 +1,4 @@
-VENUS - Build 12 Level 3 + Apprentice
+VENUS - Build 16 Final Door Key Fix
 =======================================
 
 Files included:
@@ -180,3 +180,39 @@ Level 3 flow:
 6. Enter Monster Territory, clear 4 slimes and the bats that spawn after every 2 slime kills.
 7. The Apprentice mini-boss stomps in with 250 HP. During the fight, random supply crates fade in every 25 seconds and may drop guns, swords, potions, or the new Bazooka.
 8. Kill the Apprentice, pick up the key it drops, unlock the exit door, climb to the portal, and clear the level.
+
+
+Build 14 notes:
+- Fixed iPhone/mobile HUD taps so pause, backpack, hotbar, and action buttons do not get stolen by the virtual joystick.
+- Added coordinate-based touch shielding around HUD controls for Safari/PWA mode.
+- Preserved the Apprentice key drop fix so the boss key drops near the defeated monster.
+
+Build 15 notes:
+- Fixed the Apprentice boss key drop again, more aggressively: the key now spawns at the exact death location near the Apprentice's feet instead of using generic loot coordinates.
+- Removed the Apprentice's generic loot drop so there is no hidden/ghost key behavior.
+- Added Apprentice jumping behavior. If VENUS climbs onto the arena platforms, the Apprentice can jump up and continue targeting the player.
+- Apprentice chase speed remains the same; only vertical movement was added.
+
+
+Build 16 notes:
+- Fixed Level 3 final Apprentice door not unlocking.
+- Key use now ignores already-open doors and targets the nearest locked door near VENUS.
+- Apprentice key still drops at the boss death location and uses K pickup, then Q/I near the door.
+
+
+Build 17 notes:
+- Added levels/level4.js: Level 4: Apprentice's Revenge.
+- Added the boss-round progression after Level 3.
+- Added Apprentice return cutscene, slime resurrection mechanic, survival wave, spawned helper platforms, 10-second supply crates, and a final 500 HP Apprentice fight.
+- Added Level 4 boss key drop on death and locked exit door before the final portal.
+- Added boss camera focus support for future boss levels without breaking Level 3.
+
+Level 4 flow:
+1. Spawn into screen shake while VENUS says: "I recognize that sound.."
+2. Camera reveals the Apprentice returning: "You thought i was dead? HA!"
+3. Apprentice watches from a platform and sends slimes.
+4. After the first slime dies, he resurrects one slime.
+5. After the slime trial, he spawns helper platforms and starts a 60-second survival wave with bats/slimes.
+6. Supply crates flash into the arena every 10 seconds during the survival wave.
+7. Apprentice drops down for a 500 HP fight. Boss supply crates spawn every 15 seconds.
+8. Kill the Apprentice, pick up the key with K, equip/use it near the exit door with Q/I, read the developer sign, and enter the portal.
