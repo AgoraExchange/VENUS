@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#4e2aa4"/>
+      <stop offset="55%" stop-color="#120b28"/>
+      <stop offset="100%" stop-color="#05040b"/>
+    </radialGradient>
+    <linearGradient id="blade" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#fff4c7"/>
+      <stop offset="45%" stop-color="#f6c768"/>
+      <stop offset="100%" stop-color="#74f6ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
+  <path d="M96 20 143 57 126 148 96 174 66 148 49 57Z" fill="none" stroke="#f6c768" stroke-width="7" opacity=".9"/>
+  <path d="M96 35 113 90 96 154 79 90Z" fill="url(#blade)" stroke="#f7f0df" stroke-width="3"/>
+  <path d="M63 65c24 15 42 15 66 0M60 128c26-18 46-18 72 0" fill="none" stroke="#74f6ff" stroke-width="5" stroke-linecap="round" opacity=".85"/>
+  <text x="96" y="109" text-anchor="middle" font-family="Georgia,serif" font-size="34" font-weight="700" fill="#f7f0df" letter-spacing="6">V</text>
+</svg>
