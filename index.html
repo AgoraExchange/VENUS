@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#090711" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VENUS" />
+  <meta name="description" content="VENUS — Violent Enforcer with No Understanding of Surrender. A polished 2D fantasy platformer PWA." />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.svg" />
+  <link rel="icon" href="icons/icon-192.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+  <title>VENUS</title>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <canvas id="gameCanvas" aria-label="VENUS game canvas"></canvas>
+
+    <div id="scanlines" aria-hidden="true"></div>
+    <div id="vignette" aria-hidden="true"></div>
+
+    <section id="mainMenu" class="screen active">
+      <div class="menu-orbit"></div>
+      <div class="menu-card mega-card">
+        <p class="eyebrow">Prototype Build 12 • Level 3 + Apprentice</p>
+        <h1 class="venus-logo">VENUS</h1>
+        <p class="subtitle">Violent Enforcer with No Understanding of Surrender</p>
+        <div class="menu-actions">
+          <button id="startBtn" class="primary-btn">Play Game</button>
+          <button id="continueBtn" class="primary-btn hidden">Continue</button>
+          <button id="tutorialBtn" class="ghost-btn hidden">Tutorial</button>
+          <button id="resetProgressionBtn" class="danger-btn hidden">Reset Progression</button>
+          <button id="controlsBtn" class="ghost-btn">Controls</button>
+          <button id="settingsBtn" class="ghost-btn">Settings</button>
+          <button id="creditsBtn" class="ghost-btn">Credits</button>
+        </div>
+        <p id="modePill" class="mode-pill">Detecting device...</p>
+      </div>
+    </section>
+
+    <section id="pauseMenu" class="screen hidden">
+      <div class="menu-card small-card">
+        <h2>Paused</h2>
+        <p class="muted">The grove is frozen. Your run is safe... for now.</p>
+        <div class="menu-actions compact">
+          <button id="resumeBtn" class="primary-btn">Resume</button>
+          <button id="restartBtn" class="ghost-btn">Restart Level</button>
+          <button id="inventoryFromPauseBtn" class="ghost-btn">Backpack</button>
+          <button id="pauseSettingsBtn" class="ghost-btn">Settings</button>
+          <button id="quitBtn" class="danger-btn">Quit to Menu</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="infoModal" class="screen hidden">
+      <div class="menu-card info-card">
+        <button id="closeInfoBtn" class="x-btn" aria-label="Close">×</button>
+        <h2 id="infoTitle">Info</h2>
+        <div id="infoBody" class="info-body"></div>
+      </div>
+    </section>
+
+    <section id="levelComplete" class="screen hidden">
+      <div class="menu-card complete-card">
+        <p class="eyebrow">Objective Complete</p>
+        <h2 id="completeTitle">Thornwake Grove Cleared</h2>
+        <div id="rewardGrid" class="reward-grid"></div>
+        <button id="nextBtn" class="primary-btn">Play Again</button>
+        <button id="completeMenuBtn" class="ghost-btn">Main Menu</button>
+      </div>
+    </section>
+
+    <section id="gameOver" class="screen hidden">
+      <div class="menu-card small-card danger-glow">
+        <p class="eyebrow">Run Terminated</p>
+        <h2>VENUS Fell</h2>
+        <p class="muted">Respawn at checkpoint or rebuild the run from zero.</p>
+        <div class="menu-actions compact">
+          <button id="respawnBtn" class="primary-btn">Respawn</button>
+          <button id="gameOverRestartBtn" class="ghost-btn">Restart Level</button>
+          <button id="gameOverMenuBtn" class="danger-btn">Main Menu</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="hud" class="hud hidden">
+      <div class="hud-top">
+        <div class="brand-mini">
+          <span>VENUS</span>
+          <small id="levelNameText">Tutorial: Locked Grove Tower</small>
+        </div>
+        <div class="health-wrap">
+          <div class="heart-row" id="heartRow">♥ ♥ ♥</div>
+          <div class="hp-bar">
+            <div id="hpFill" class="hp-fill"></div>
+          </div>
+          <span id="hpText" class="hp-text">100/100</span>
+        </div>
+        <div class="resource-row">
+          <span id="coinText">◎ 0</span>
+          <span id="xpText">XP 0</span>
+          <span id="scoreText">Score 0</span>
+        </div>
+      </div>
+
+      <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+
+      <button id="pauseBtn" class="round-btn pause-btn" aria-label="Pause">Ⅱ</button>
+      <button id="invBtn" class="round-btn inv-btn" aria-label="Inventory">🎒</button>
+
+      <div id="equippedPill" class="equipped-pill">In hand: loading...</div>
+
+      <div id="hotbar" class="hotbar" aria-label="Hotbar"></div>
+
+      <div id="mobileJoystick" class="mobile-joystick" aria-hidden="true">
+        <span id="mobileJoystickKnob"></span>
+      </div>
+
+      <div id="mobileControls" class="mobile-controls hidden">
+        <button id="mobileAttack" class="mobile-action" aria-label="Attack">⚔</button>
+        <button id="mobileInteract" class="mobile-action" aria-label="Interact">K</button>
+        <button id="mobileUse" class="mobile-action" aria-label="Use held item">✚</button>
+        <button id="mobileSlide" class="mobile-action" aria-label="Drop or slide">↓</button>
+      </div>
+    </div>
+
+    <section id="inventoryModal" class="inventory-modal hidden">
+      <div class="inventory-card">
+        <div class="inventory-head">
+          <div>
+            <p class="eyebrow">Backpack / Hotbar</p>
+            <h2>Field Inventory</h2>
+          </div>
+          <button id="closeInventoryBtn" class="x-btn" aria-label="Close inventory">×</button>
+        </div>
+        <p class="muted small-text">Click an item to assign it to the selected hotbar slot. Weapons attack with Space and now lose durability. Keys/tools and potions use Q or I. Loot pickups require K / mobile Interact. Press S/Down on green platforms to drop through.</p>
+        <div id="inventoryList" class="inventory-list"></div>
+        <div class="inventory-foot">
+          <button id="useSelectedBtn" class="primary-btn">Use Selected Hotbar Item</button>
+          <button id="clearHotbarBtn" class="ghost-btn">Clear Slot</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <audio id="bgMusic" src="assets/VenusSoundtrack.mp3" preload="auto" loop></audio>
+  <noscript>VENUS requires JavaScript to run.</noscript>
+  <script src="levels/tutorial.js" defer></script>
+  <script src="levels/level1.js" defer></script>
+  <script src="levels/level2.js" defer></script>
+  <script src="levels/level3.js" defer></script>
+  <script src="script.js" defer></script>
+</body>
+</html>
