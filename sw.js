@@ -1,4 +1,4 @@
-const CACHE_NAME = "venus-build-17-v1";
+const CACHE_NAME = "venus-build-18-v1";
 const ASSETS = [
   "./",
   "./index.html",

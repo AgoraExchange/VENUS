@@ -24,7 +24,7 @@
     <section id="mainMenu" class="screen active">
       <div class="menu-orbit"></div>
       <div class="menu-card mega-card">
-        <p class="eyebrow">Prototype Build 15 • Apprentice Key + Jump Fix</p>
+        <p class="eyebrow">Prototype Build 18 • Secret Mod Menu</p>
         <h1 class="venus-logo">VENUS</h1>
         <p class="subtitle">Violent Enforcer with No Understanding of Surrender</p>
         <div class="menu-actions">
@@ -48,6 +48,7 @@
           <button id="resumeBtn" class="primary-btn">Resume</button>
           <button id="restartBtn" class="ghost-btn">Restart Level</button>
           <button id="inventoryFromPauseBtn" class="ghost-btn">Backpack</button>
+          <button id="openModMenuBtn" class="ghost-btn mod-pause-btn">Mod Menu</button>
           <button id="pauseSettingsBtn" class="ghost-btn">Settings</button>
           <button id="quitBtn" class="danger-btn">Quit to Menu</button>
         </div>
@@ -59,6 +60,42 @@
         <button id="closeInfoBtn" class="x-btn" aria-label="Close">×</button>
         <h2 id="infoTitle">Info</h2>
         <div id="infoBody" class="info-body"></div>
+      </div>
+    </section>
+
+    <section id="modMenu" class="screen hidden">
+      <div class="menu-card mod-card">
+        <button id="closeModBtn" class="x-btn" aria-label="Close mod menu">×</button>
+        <p class="eyebrow">Developer Access</p>
+        <h2>VENUS Mod Menu</h2>
+        <p class="muted">Secret sandbox tools for testing levels, weapons, skins, and chaos.</p>
+
+        <div id="modLock" class="mod-lock">
+          <label for="modPasswordInput">Password</label>
+          <input id="modPasswordInput" class="mod-input" type="password" autocomplete="off" spellcheck="false" placeholder="Enter password" />
+          <button id="modUnlockBtn" class="primary-btn">Unlock Mods</button>
+          <p id="modPasswordHint" class="mod-hint">PC: press M to open/close. Mobile: Pause → Mod Menu.</p>
+        </div>
+
+        <div id="modOptions" class="mod-options hidden">
+          <div class="mod-grid">
+            <button id="modGodBtn" class="mod-toggle">God Mode: Off</button>
+            <button id="modDurabilityBtn" class="mod-toggle">Infinite Durability: Off</button>
+            <button id="modAmmoBtn" class="mod-toggle">Infinite Ammo: Off</button>
+            <button id="modGiveGunBtn" class="ghost-btn">Give Gun</button>
+            <button id="modGiveBazookaBtn" class="ghost-btn">Give Bazooka</button>
+            <button id="modGiveSwordBtn" class="ghost-btn">Give Sword</button>
+            <button id="modGiveHealsBtn" class="ghost-btn">Give All Healables</button>
+          </div>
+
+          <p class="eyebrow mod-skin-title">Character Skins</p>
+          <div class="skin-grid">
+            <button id="skinDefaultBtn" class="skin-btn">Default Man</button>
+            <button id="skinGoldBtn" class="skin-btn">Gold Man</button>
+            <button id="skinRainbowBtn" class="skin-btn">Rainbow Man</button>
+            <button id="skinGalaxyBtn" class="skin-btn">Galaxy Man</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -135,7 +172,7 @@
           </div>
           <button id="closeInventoryBtn" class="x-btn" aria-label="Close inventory">×</button>
         </div>
-        <p class="muted small-text">Click an item to assign it to the selected hotbar slot. Weapons attack with Space and now lose durability. Keys/tools and potions use Q or I. Loot pickups require K / mobile Interact. Press S/Down on green platforms to drop through.</p>
+        <p class="muted small-text">Click an item to assign it to the selected hotbar slot. Keys/tools and potions use Q, I or for Mobile "+". Loot pickups require interaction using K / mobile Interact. Press S/Down on green platforms to drop through.</p>
         <div id="inventoryList" class="inventory-list"></div>
         <div class="inventory-foot">
           <button id="useSelectedBtn" class="primary-btn">Use Selected Hotbar Item</button>

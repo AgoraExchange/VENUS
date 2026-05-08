@@ -216,3 +216,13 @@ Level 4 flow:
 6. Supply crates flash into the arena every 10 seconds during the survival wave.
 7. Apprentice drops down for a 500 HP fight. Boss supply crates spawn every 15 seconds.
 8. Kill the Apprentice, pick up the key with K, equip/use it near the exit door with Q/I, read the developer sign, and enter the portal.
+
+
+Build 18 notes:
+- Added the secret Mod Menu.
+- Desktop/laptop: press M while in a level to pause and open/close the Mod Menu.
+- Mobile/iPhone: press Pause, then Mod Menu.
+- Password for this beta build: Admin!
+- Mods included: God Mode, Infinite Durability, Infinite Ammo, Give Gun, Give Bazooka, Give Sword, Give All Healables.
+- Character skins included: Default Man, Gold Man, Rainbow Man, and Galaxy Man.
+- God Mode blocks enemy/hazard damage. Infinite Durability stops weapons from losing durability. Infinite Ammo stops guns/bazookas from consuming ammo.

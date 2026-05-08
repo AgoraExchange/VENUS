@@ -2,13 +2,13 @@
   "use strict";
 
   /* ============================================================
-     VENUS - Build 17
+     VENUS - Build 18
      Vanilla JS canvas platformer/PWA base. Everything here is
      data-driven and beginner-readable so you can expand it later.
   ============================================================ */
 
   const SAVE_KEY = "venus_build_08_progression_save";
-  const VERSION = "0.13.0";
+  const VERSION = "0.18.0";
 
   const ITEM_DEFS = {
     smallPotion: {
@@ -118,6 +118,11 @@
     mainMenu: document.getElementById("mainMenu"),
     pauseMenu: document.getElementById("pauseMenu"),
     infoModal: document.getElementById("infoModal"),
+    modMenu: document.getElementById("modMenu"),
+    modLock: document.getElementById("modLock"),
+    modOptions: document.getElementById("modOptions"),
+    modPasswordInput: document.getElementById("modPasswordInput"),
+    modPasswordHint: document.getElementById("modPasswordHint"),
     infoTitle: document.getElementById("infoTitle"),
     infoBody: document.getElementById("infoBody"),
     levelComplete: document.getElementById("levelComplete"),
@@ -158,6 +163,7 @@
     resume: document.getElementById("resumeBtn"),
     restart: document.getElementById("restartBtn"),
     inventoryFromPause: document.getElementById("inventoryFromPauseBtn"),
+    openModMenu: document.getElementById("openModMenuBtn"),
     pauseSettings: document.getElementById("pauseSettingsBtn"),
     quit: document.getElementById("quitBtn"),
     next: document.getElementById("nextBtn"),
@@ -171,11 +177,24 @@
     mobileAttack: document.getElementById("mobileAttack"),
     mobileUse: document.getElementById("mobileUse"),
     mobileSlide: document.getElementById("mobileSlide"),
-    mobileInteract: document.getElementById("mobileInteract")
+    mobileInteract: document.getElementById("mobileInteract"),
+    closeMod: document.getElementById("closeModBtn"),
+    modUnlock: document.getElementById("modUnlockBtn"),
+    modGod: document.getElementById("modGodBtn"),
+    modDurability: document.getElementById("modDurabilityBtn"),
+    modAmmo: document.getElementById("modAmmoBtn"),
+    modGiveGun: document.getElementById("modGiveGunBtn"),
+    modGiveBazooka: document.getElementById("modGiveBazookaBtn"),
+    modGiveSword: document.getElementById("modGiveSwordBtn"),
+    modGiveHeals: document.getElementById("modGiveHealsBtn"),
+    skinDefault: document.getElementById("skinDefaultBtn"),
+    skinGold: document.getElementById("skinGoldBtn"),
+    skinRainbow: document.getElementById("skinRainbowBtn"),
+    skinGalaxy: document.getElementById("skinGalaxyBtn")
   };
 
   const state = {
-    screen: "menu", // menu | playing | paused | inventory | complete | gameover | info
+    screen: "menu", // menu | playing | paused | inventory | complete | gameover | info | mod
     lastScreen: "menu",
     dpr: 1,
     width: 1280,
@@ -187,6 +206,14 @@
     reduceShake: false,
     mobileMode: false,
     muted: false,
+    modReturnScreen: "playing",
+    mods: {
+      unlocked: false,
+      godMode: false,
+      infiniteDurability: false,
+      infiniteAmmo: false,
+      skin: "default"
+    },
     musicUnlocked: false,
     musicPausedForDeath: false,
     save: defaultSave(),
@@ -275,6 +302,7 @@
     hide(dom.mainMenu);
     hide(dom.pauseMenu);
     hide(dom.infoModal);
+    hide(dom.modMenu);
     hide(dom.levelComplete);
     hide(dom.gameOver);
   }
@@ -299,6 +327,11 @@
     } else if (next === "inventory") {
       dom.hud.classList.remove("hidden");
       showInventory();
+    } else if (next === "mod") {
+      show(dom.modMenu);
+      if (player) dom.hud.classList.remove("hidden");
+      hide(dom.inventoryModal);
+      renderModMenu();
     } else if (next === "complete") {
       show(dom.levelComplete);
       hide(dom.inventoryModal);
@@ -426,6 +459,25 @@
 
     window.addEventListener("keydown", (e) => {
       const k = e.key.toLowerCase();
+      const typingTarget = document.activeElement && ["input", "textarea"].includes(document.activeElement.tagName?.toLowerCase());
+
+      if (typingTarget) {
+        if (k === "m" && state.screen === "mod") {
+          e.preventDefault();
+          closeModMenu();
+          return;
+        }
+        if (k === "enter" && document.activeElement === dom.modPasswordInput) submitModPassword();
+        if (k === "escape" && state.screen === "mod") closeModMenu();
+        return;
+      }
+
+      if (k === "m") {
+        e.preventDefault();
+        toggleModMenu();
+        return;
+      }
+
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(e.key) || ["w", "a", "s", "d"].includes(k)) {
         e.preventDefault();
       }
@@ -521,6 +573,7 @@
         buttons.mobileSlide,
         dom.inventoryModal,
         dom.pauseMenu,
+        dom.modMenu,
         dom.infoModal,
         dom.levelComplete,
         dom.gameOver
@@ -857,6 +910,7 @@
     weaponDurabilityPct(id) {
       const max = this.weaponMaxDurability(id);
       if (!max) return 0;
+      if (state.mods?.infiniteDurability) return 1;
       return clamp((this.weaponDurability[id] || 0) / max, 0, 1);
     }
 
@@ -869,6 +923,12 @@
     damageWeapon(id, amount, reason = "use") {
       const max = this.weaponMaxDurability(id);
       if (!max || (this.inventory[id] || 0) <= 0) return false;
+      if (state.mods?.infiniteDurability) {
+        if ((this.weaponDurability[id] || 0) <= 0) this.weaponDurability[id] = max;
+        renderHotbar();
+        updateEquippedPill();
+        return false;
+      }
       if ((this.weaponDurability[id] || 0) <= 0) this.weaponDurability[id] = max;
       this.weaponDurability[id] = clamp(this.weaponDurability[id] - amount, 0, max);
       const def = ITEM_DEFS[id];
@@ -953,7 +1013,7 @@
         discScratch(0.18);
         return;
       }
-      this.inventory[kind]--;
+      if (!state.mods?.infiniteAmmo) this.inventory[kind]--;
       this.gunCooldown = kind === "bazooka" ? 0.88 : 0.5;
       this.attackTimer = kind === "bazooka" ? 0.18 : 0.12;
       const px = this.facing > 0 ? this.x + this.w + 2 : this.x - (kind === "bazooka" ? 26 : 12);
@@ -966,7 +1026,7 @@
       renderHotbar();
       renderInventory();
       updateEquippedPill();
-      if ((this.inventory[kind] || 0) <= 0) {
+      if (!state.mods?.infiniteAmmo && (this.inventory[kind] || 0) <= 0) {
         this.removeEmptyGun(kind);
         this.think(kind === "bazooka" ? "Damn, im out of rockets." : "Damn, im out of ammo.", 3);
       }
@@ -1026,6 +1086,14 @@
     }
 
     takeDamage(amount, source = "damage") {
+      if (state.mods?.godMode) {
+        if (this.invincible <= 0) {
+          this.invincible = 0.2;
+          floatingTexts.push(new FloatingText(this.x + this.w / 2, this.y - 8, "GOD MODE", COLORS.gold));
+          tinyBeep(720, 0.025);
+        }
+        return;
+      }
       if (this.invincible > 0 || this.dead) return;
       const before = this.hp;
       this.hp = Math.max(0, this.hp - amount);
@@ -1261,16 +1329,7 @@
       ctx.fill();
       ctx.globalAlpha = blink ? 0.55 : 1;
 
-      const body = ctx.createLinearGradient(0, -30, 0, 38);
-      body.addColorStop(0, "#23213d");
-      body.addColorStop(0.55, "#0d0b17");
-      body.addColorStop(1, "#05050b");
-      ctx.fillStyle = body;
-      roundedRect(ctx, -16, -18 + bob + crouch * 0.35, 32, 45 - crouch, 13);
-      ctx.fill();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "rgba(255,255,255,.12)";
-      ctx.stroke();
+      drawPlayerBodySkin(bob, crouch);
 
       const head = ctx.createRadialGradient(-5, -29 + bob, 4, 0, -28 + bob, 19);
       head.addColorStop(0, "#ffe2af");
@@ -1290,6 +1349,8 @@
       roundedRect(ctx, 2, -34 + bob, 13, 5, 3);
       ctx.fill();
       ctx.shadowBlur = 0;
+
+      drawPlayerHatSkin(bob);
 
       ctx.strokeStyle = "#090712";
       ctx.lineWidth = 7;
@@ -1861,16 +1922,16 @@
         spawnParticles(c.x, c.y, 18, this.type === "key" ? COLORS.gold : this.type === "sword" ? COLORS.cyan : "#8dffad", 0.6);
         tinyBeep(720, 0.04);
         if (this.type === "key") {
-          player.think("Key secured. Open inventory, assign it to a hotbar slot, then use Q near the door.", 3.4);
+          player.think("A key! I will use this to open the locked tower.", 3.4);
           toast("Tower Key added to backpack. Open E and place it in your hotbar.");
         } else if (this.type === "sword") {
-          player.think("Blade acquired. Put it in the hotbar, then Space to attack.", 3.2);
+          player.think("Wow, this is sharp! I will use this to attack enemies.", 3.2);
           toast("Sword added to backpack with 100% durability. Equip it from inventory.");
         } else if (this.type === "gun") {
-          player.think("Six shots. Make them count.", 2.8);
+          player.think("Holy SHIT. A gun?! 6 shots to make it count.", 3.0);
           toast("Gun added to backpack with 6 shots and 100% durability.");
         } else if (this.type === "bazooka") {
-          player.think("Two rockets. Big problem solver.", 2.8);
+          player.think("Im about to BLOW SHIT UP! If only i had more then 2 rockets..", 3.2);
           toast("Bazooka added to backpack with 2 rockets and 100% durability.");
         }
       }
@@ -2493,7 +2554,7 @@
           state.inputLocked = false;
           state.cinematicZoom = 1;
           level.flags.cameraFocus = null;
-          player.think("MOVE!", 1.2);
+          player.think("HOLY FUCK! WHAT THE FUCK IS THAT!", 2.5);
         }
       }
     }
@@ -2512,7 +2573,7 @@
       state.inputLocked = true;
       state.cinematicZoom = 1.16;
       level.flags.cameraFocus = "player";
-      player.think("Holy cow! I did not expect to win that fight!", 3);
+      player.think("Holy shit! I did not expect to win that fight!", 3);
       setTimeout(() => {
         if (level?.id === "level3") {
           state.inputLocked = false;
@@ -2821,7 +2882,7 @@
       state.inputLocked = true;
       state.cinematicZoom = 1.14;
       level.flags.cameraFocus = "player";
-      player.think("He is finally down. Grab the key.", 3);
+      player.think("BOOgey Man looking Ass MoTHA FUckA! Better be dead this time.", 3);
       setTimeout(() => {
         if (level?.id === "level4") {
           state.inputLocked = false;
@@ -2936,8 +2997,8 @@
     toast(level.startMessage);
 
     const firstTip = level.id === "tutorial"
-      ? "Find the locked door, then climb the tower for the key."
-      : (level.scripts?.firstTip || "Level online. Read the first sign, trust nothing, and reach the portal.");
+      ? "A locked tower? I should probaly find the key.."
+      : (level.scripts?.firstTip || "I need a hit, im to sober for this..");
     setTimeout(() => player?.think(firstTip, 3), 350);
     toast(state.mobileMode ? "Mobile: drag anywhere to move, swipe up/down for jump/drop, tap to attack, use Interact for loot." : "Desktop: W/↑ jumps. Space attacks. Q/I uses held item.");
   }
@@ -3040,7 +3101,8 @@
     const count = id ? (player.inventory[id] || 0) : 0;
     const durabilityPct = def?.weapon ? Math.ceil(player.weaponDurabilityPct(id) * 100) : null;
     const actionText = def?.weapon ? "Space to attack" : id === "key" ? "Q/I near door" : def?.heal ? "Q/I to use" : "Equipped";
-    const weaponInfo = def?.weapon ? ` • Durability ${durabilityPct}%${id === "gun" ? ` • Ammo ${count}` : id === "bazooka" ? ` • Rockets ${count}` : ""}` : ` × ${count}`;
+    const ammoText = state.mods?.infiniteAmmo ? "∞" : count;
+    const weaponInfo = def?.weapon ? ` • Durability ${durabilityPct}%${id === "gun" ? ` • Ammo ${ammoText}` : id === "bazooka" ? ` • Rockets ${ammoText}` : ""}` : ` × ${count}`;
     dom.equippedPill.textContent = def
       ? `In hand: ${def.icon} ${def.name}${weaponInfo}  •  ${actionText}`
       : `In hand: empty  •  E backpack  •  1-6 switch  •  Q/I use  •  S/↓ drops green platforms`;
@@ -3070,13 +3132,13 @@
   function showControls() {
     const desktop = `
       <p><strong>Desktop Controls</strong></p>
-      <p><kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd> move • <kbd>W</kbd>/<kbd>↑</kbd> jump • <kbd>Space</kbd> attack/use weapon • <kbd>K</kbd> interact/pick up • <kbd>E</kbd> backpack • <kbd>1</kbd>-<kbd>6</kbd> hotbar • <kbd>Q</kbd>/<kbd>I</kbd> use held item/tool • <kbd>Esc</kbd> pause.</p>
+      <p><kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd> move • <kbd>W</kbd>/<kbd>↑</kbd> jump • <kbd>Space</kbd> attack/use weapon • <kbd>K</kbd> interact/pick up • <kbd>E</kbd> backpack • <kbd>1</kbd>-<kbd>6</kbd> hotbar • <kbd>Q</kbd>/<kbd>I</kbd> use held item/tool • <kbd>Esc</kbd> pause • <kbd>M</kbd> secret mod menu.</p>
     `;
     const mobile = `
       <p><strong>Mobile Controls</strong></p>
       <p>Touch/small screens now use a virtual joystick feel. Drag anywhere on the game view left/right to move, swipe/drag up to jump, swipe/drag down to drop through green platforms or slide, tap the canvas to attack, and use the on-screen K button to interact with chests, trap doors, and loot. Use ✚/Q to use the held item. The selected item is visibly held by VENUS.</p>
     `;
-    showInfo("Controls", desktop + mobile + `<p class="muted">Pro tip: Build 16 keeps each map in separate /levels files. Tutorial, Level 1, Level 2, and Level 3 load through LEVEL_ORDER. Keys/tools use Q/I, weapons attack with Space, loot uses K, and Level 2 now has hidden trapdoor/objective scripting.</p>`);
+    showInfo("Controls", desktop + mobile + `<p class="muted">Pro tip: Build 18 keeps each map in separate /levels files. Tutorial, Level 1, Level 2, and Level 3 load through LEVEL_ORDER. Keys/tools use Q/I, weapons attack with Space, loot uses K, and Level 2 now has hidden trapdoor/objective scripting.</p>`);
   }
 
   function showSettings() {
@@ -3112,11 +3174,13 @@
 
   function showCredits() {
     showInfo("Credits", `
-      <p><strong>VENUS</strong> is an original vanilla web game prototype.</p>
-      <p>Built for expansion: new characters, bosses, biomes, quests, loot, weapons, and PWA polish can be layered on top without rewriting the whole thing.</p>
-      <p class="muted">Code architecture: Canvas renderer, entity update loop, platform physics, inventory/hotbar, localStorage save system, offline service worker, mobile/desktop mode switching.</p>
+      <p><strong>V.E.N.U.S.</strong> — the Violent Enforcer with No Understanding of Surrender, serves as the core identity of this original action web‑game prototype.</p>
+      <p>Designed for long‑term expansion, the project is built to seamlessly support new characters, bosses, biomes, quests, loot, weapons, and future gameplay systems without requiring major rewrites.</p>
+      <p class="muted">Code architecture: Canvas renderer, entity update loop, platform physics, inventory/hotbar system, localStorage save data, offline‑ready service worker, adaptive mobile/desktop mode switching.</p>
+      <p><em>Developed By Richie</em></p>
     `);
   }
+
 
   function toast(message) {
     const existing = [...dom.toastStack.children].find(n => n.textContent === message);
@@ -3770,6 +3834,121 @@
     ctx.restore();
   }
 
+
+  function rainbowColor(offset = 0, light = 60) {
+    const hue = (state.time * 105 + offset) % 360;
+    return `hsl(${hue}, 95%, ${light}%)`;
+  }
+
+  function drawTinyGalaxyStars(x, y, w, h, count = 12) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    for (let i = 0; i < count; i++) {
+      const px = x + ((i * 17 + Math.sin(state.time * 0.8 + i) * 7 + 22) % Math.max(1, w));
+      const py = y + ((i * 23 + Math.cos(state.time * 0.7 + i) * 5 + 14) % Math.max(1, h));
+      ctx.fillStyle = i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? COLORS.cyan : COLORS.gold;
+      ctx.globalAlpha = 0.55 + Math.sin(state.time * 3 + i) * 0.25;
+      ctx.beginPath();
+      ctx.arc(px, py, i % 4 === 0 ? 2.1 : 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPlayerBodySkin(bob, crouch) {
+    const skin = state.mods?.skin || "default";
+    const x = -16;
+    const y = -18 + bob + crouch * 0.35;
+    const w = 32;
+    const h = 45 - crouch;
+
+    if (skin === "gold") {
+      const g = ctx.createLinearGradient(0, y, 0, y + h);
+      g.addColorStop(0, "#fff4a9");
+      g.addColorStop(0.45, "#f6c768");
+      g.addColorStop(1, "#9e5d18");
+      ctx.fillStyle = g;
+    } else if (skin === "rainbow") {
+      const g = ctx.createLinearGradient(x, y, x + w, y + h);
+      g.addColorStop(0, rainbowColor(0, 62));
+      g.addColorStop(0.5, rainbowColor(125, 58));
+      g.addColorStop(1, rainbowColor(250, 62));
+      ctx.fillStyle = g;
+      ctx.shadowColor = rainbowColor(80, 62);
+      ctx.shadowBlur = 12;
+    } else if (skin === "galaxy") {
+      const g = ctx.createLinearGradient(0, y, 0, y + h);
+      g.addColorStop(0, "#101043");
+      g.addColorStop(0.45, "#3b1678");
+      g.addColorStop(1, "#050510");
+      ctx.fillStyle = g;
+      ctx.shadowColor = COLORS.violet;
+      ctx.shadowBlur = 12;
+    } else {
+      const body = ctx.createLinearGradient(0, -30, 0, 38);
+      body.addColorStop(0, "#23213d");
+      body.addColorStop(0.55, "#0d0b17");
+      body.addColorStop(1, "#05050b");
+      ctx.fillStyle = body;
+    }
+
+    roundedRect(ctx, x, y, w, h, 13);
+    ctx.fill();
+    if (skin === "galaxy") drawTinyGalaxyStars(x, y, w, h, 13);
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = skin === "gold" ? "rgba(255,244,169,.72)" : "rgba(255,255,255,.12)";
+    ctx.stroke();
+  }
+
+  function drawPlayerHatSkin(bob) {
+    const skin = state.mods?.skin || "default";
+    if (skin === "default") return;
+
+    ctx.save();
+    const brimY = -48 + bob;
+    const crownY = -68 + bob;
+    if (skin === "gold") {
+      const g = ctx.createLinearGradient(0, crownY, 0, brimY + 9);
+      g.addColorStop(0, "#fff5b5");
+      g.addColorStop(0.55, COLORS.gold);
+      g.addColorStop(1, "#9e5d18");
+      ctx.fillStyle = g;
+      ctx.strokeStyle = "#4d2b0f";
+    } else if (skin === "rainbow") {
+      const g = ctx.createLinearGradient(-20, crownY, 20, brimY + 10);
+      g.addColorStop(0, rainbowColor(190, 64));
+      g.addColorStop(0.5, rainbowColor(320, 60));
+      g.addColorStop(1, rainbowColor(50, 64));
+      ctx.fillStyle = g;
+      ctx.strokeStyle = "rgba(255,255,255,.42)";
+      ctx.shadowColor = rainbowColor(300, 65);
+      ctx.shadowBlur = 10;
+    } else {
+      const g = ctx.createLinearGradient(0, crownY, 0, brimY + 10);
+      g.addColorStop(0, "#07134d");
+      g.addColorStop(0.5, "#5519a5");
+      g.addColorStop(1, "#050510");
+      ctx.fillStyle = g;
+      ctx.strokeStyle = "rgba(116,246,255,.38)";
+      ctx.shadowColor = COLORS.violet;
+      ctx.shadowBlur = 12;
+    }
+    roundedRect(ctx, -22, brimY, 44, 8, 4);
+    ctx.fill();
+    ctx.stroke();
+    roundedRect(ctx, -12, crownY, 24, 22, 5);
+    ctx.fill();
+    ctx.stroke();
+    if (skin === "galaxy") {
+      drawTinyGalaxyStars(-12, crownY, 24, 22, 8);
+    }
+    ctx.restore();
+  }
+
   function drawPotion(x, y, large) {
     ctx.save();
     ctx.shadowColor = large ? "#ff7aa2" : "#8dffad";
@@ -3822,7 +4001,7 @@
     const dt = clamp(rawDt, 0, 0.033);
     state.dt = dt;
     state.time += dt;
-    if (state.screen === "playing" || state.screen === "paused" || state.screen === "inventory" || state.screen === "menu" || state.screen === "info") {
+    if (state.screen === "playing" || state.screen === "paused" || state.screen === "inventory" || state.screen === "menu" || state.screen === "info" || state.screen === "mod") {
       updateGame(dt);
     }
     render();
@@ -3924,6 +4103,7 @@
     buttons.resume.addEventListener("click", () => setScreen("playing"));
     buttons.restart.addEventListener("click", restartLevel);
     buttons.inventoryFromPause.addEventListener("click", () => setScreen("inventory"));
+    buttons.openModMenu?.addEventListener("click", openModMenu);
     buttons.pauseSettings.addEventListener("click", showSettings);
     buttons.quit.addEventListener("click", () => setScreen("menu"));
     buttons.next.addEventListener("click", () => {
@@ -3964,6 +4144,128 @@
     bindMobileHudTouchShield();
   }
 
+
+  function openModMenu() {
+    if (!player || ["menu", "complete", "gameover"].includes(state.screen)) {
+      toast("Start a level first, then open the Mod Menu.");
+      return;
+    }
+    state.modReturnScreen = state.screen === "paused" || state.screen === "inventory" ? "playing" : state.screen;
+    hide(dom.inventoryModal);
+    setScreen("mod");
+    setTimeout(() => {
+      if (!state.mods.unlocked) dom.modPasswordInput?.focus?.();
+    }, 50);
+  }
+
+  function closeModMenu() {
+    if (!player) {
+      setScreen("menu");
+      return;
+    }
+    hide(dom.modMenu);
+    setScreen("playing");
+    toast("Mod Menu closed. Game resumed.");
+  }
+
+  function toggleModMenu() {
+    if (state.screen === "mod") closeModMenu();
+    else openModMenu();
+  }
+
+  function submitModPassword() {
+    const value = dom.modPasswordInput?.value || "";
+    if (value === "Venus!") {
+      state.mods.unlocked = true;
+      if (dom.modPasswordInput) dom.modPasswordInput.value = "";
+      renderModMenu();
+      toast("Mod Menu unlocked.");
+      tinyBeep(900, 0.06);
+    } else {
+      if (dom.modPasswordHint) dom.modPasswordHint.textContent = "Wrong password. Hint: ask the developer.";
+      screenShake(6);
+      discScratch(0.16);
+    }
+  }
+
+  function renderModMenu() {
+    if (!dom.modMenu) return;
+    const unlocked = Boolean(state.mods.unlocked);
+    dom.modLock?.classList.toggle("hidden", unlocked);
+    dom.modOptions?.classList.toggle("hidden", !unlocked);
+    if (!unlocked) return;
+
+    const setToggle = (btn, on, label) => {
+      if (!btn) return;
+      btn.classList.toggle("active", on);
+      btn.textContent = `${label}: ${on ? "On" : "Off"}`;
+    };
+    setToggle(buttons.modGod, state.mods.godMode, "God Mode");
+    setToggle(buttons.modDurability, state.mods.infiniteDurability, "Infinite Durability");
+    setToggle(buttons.modAmmo, state.mods.infiniteAmmo, "Infinite Ammo");
+
+    const skin = state.mods.skin || "default";
+    const skinButtons = {
+      default: buttons.skinDefault,
+      gold: buttons.skinGold,
+      rainbow: buttons.skinRainbow,
+      galaxy: buttons.skinGalaxy
+    };
+    Object.entries(skinButtons).forEach(([id, btn]) => btn?.classList.toggle("active", id === skin));
+  }
+
+  function setModFlag(key, value = null) {
+    state.mods[key] = value === null ? !state.mods[key] : value;
+    renderModMenu();
+    renderHotbar();
+    updateEquippedPill();
+    toast(`${key.replace(/[A-Z]/g, m => " " + m).replace(/^./, c => c.toUpperCase())}: ${state.mods[key] ? "On" : "Off"}`);
+  }
+
+  function modGiveItem(id, amount = 1, label = null) {
+    if (!player) return;
+    player.addItem(id, amount);
+    if (ITEM_DEFS[id]?.weapon) player.weaponDurability[id] = player.weaponMaxDurability(id);
+    if (!player.hotbar.includes(id)) {
+      const targetSlot = player.hotbar[player.selectedSlot] ? player.hotbar.findIndex(v => !v) : player.selectedSlot;
+      if (targetSlot !== -1) player.hotbar[targetSlot] = id;
+    }
+    renderHotbar();
+    renderInventory();
+    updateEquippedPill();
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, COLORS.gold, 0.55);
+    toast(label || `${ITEM_DEFS[id]?.name || id} added.`);
+  }
+
+  function setPlayerSkin(skin) {
+    state.mods.skin = skin;
+    renderModMenu();
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 28, skin === "gold" ? COLORS.gold : skin === "rainbow" ? COLORS.cyan : skin === "galaxy" ? COLORS.violet : "#d9f6ff", 0.75);
+    toast(`${skin[0].toUpperCase() + skin.slice(1)} Man equipped.`);
+  }
+
+  function bindModButtons() {
+    buttons.closeMod?.addEventListener("click", closeModMenu);
+    buttons.modUnlock?.addEventListener("click", submitModPassword);
+    dom.modPasswordInput?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submitModPassword();
+    });
+    buttons.modGod?.addEventListener("click", () => setModFlag("godMode"));
+    buttons.modDurability?.addEventListener("click", () => setModFlag("infiniteDurability"));
+    buttons.modAmmo?.addEventListener("click", () => setModFlag("infiniteAmmo"));
+    buttons.modGiveGun?.addEventListener("click", () => modGiveItem("gun", 6, "Gun added with 6 shots."));
+    buttons.modGiveBazooka?.addEventListener("click", () => modGiveItem("bazooka", 2, "Bazooka added with 2 rockets."));
+    buttons.modGiveSword?.addEventListener("click", () => modGiveItem("sword", 1, "Sword added."));
+    buttons.modGiveHeals?.addEventListener("click", () => {
+      modGiveItem("smallPotion", 3, "Healables added.");
+      modGiveItem("largePotion", 2, "Healables stacked.");
+    });
+    buttons.skinDefault?.addEventListener("click", () => setPlayerSkin("default"));
+    buttons.skinGold?.addEventListener("click", () => setPlayerSkin("gold"));
+    buttons.skinRainbow?.addEventListener("click", () => setPlayerSkin("rainbow"));
+    buttons.skinGalaxy?.addEventListener("click", () => setPlayerSkin("galaxy"));
+  }
+
   function registerPWA() {
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -3976,6 +4278,7 @@
     loadSave();
     resizeCanvas();
     bindButtons();
+    bindModButtons();
     updateMenuButtons();
     touch.bind();
     registerPWA();
