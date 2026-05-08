@@ -8,9 +8,9 @@ window.VENUS_LEVELS.level2 = {
   worldWidth: 5300,
   worldHeight: 900,
   spawn: { x: 720, y: 535 },
-  startMessage: "Level 2 loaded. The obvious path is lying to you.",
+  startMessage: "Level 2 loaded. Not all is what it seems.",
   scripts: {
-    firstTip: "As above, so below. Sometimes forward is the trap.",
+    firstTip: "Oouu! A key!",
     swordWave: {
       count: 6,
       interval: 1.5,

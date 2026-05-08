@@ -4,11 +4,11 @@ window.VENUS_LEVELS = window.VENUS_LEVELS || {};
 window.VENUS_LEVELS.tutorial = {
   id: "tutorial",
   name: "Tutorial: Locked Grove Tower",
-  completeTitle: "Tutorial Cleared",
+  completeTitle: "Tutorial Complete",
   worldWidth: 3650,
   worldHeight: 900,
   spawn: { x: 160, y: 535 },
-  startMessage: "Tutorial loaded. Climb the easier tower, grab the key, unlock the door, loot weapons, and clear the slime path.",
+  startMessage: "Tutorial: Climb the platforms, find the key, unlock the door, loot weapons, and clear the slime path.",
   platforms: [
     // Starter room floor and walls. The door blocks the right side until the key is used.
     { x: 0, y: 625, w: 840, h: 120 },
@@ -47,9 +47,9 @@ window.VENUS_LEVELS.tutorial = {
   ],
   signs: [
     { x: 92, y: 574, text: "Use WASD to move. W or ↑ to jump. Space to Attack. Q/I to use item. K to interact. E is your inventory." },
-    { x: 395, y: 574, text: "Climb the tower. Jump through green platforms and land on top. Press S or ↓ while standing on one to drop to the platform below." },
+    { x: 395, y: 574, text: "Jump through green platforms. Press S or ↓ to drop to the platform below. Search for loot." },
     { x: 955, y: 574, text: "Scavenge loot from nearby chest. Find supplies for the adventure ahead!" },
-    { x: 1290, y: 574, text: "Use your weapons to break open crates for valuable loot." },
+    { x: 1290, y: 574, text: "Use your weapon to break open crates for valuable loot." },
     { x: 1640, y: 574, text: "Damage and attack enemies using your weapons. Stay in the fight by using your consumables!" }
   ],
   chests: [

@@ -10,7 +10,7 @@ window.VENUS_LEVELS.level3 = {
   spawn: { x: 150, y: 658 },
   startMessage: "Level 3 loaded. Monster Territory is ahead.",
   scripts: {
-    firstTip: "Lots of enemies ahead. Use platforms, supplies, and your hotbar like a menace.",
+    firstTip: "Welp, ive manageed to get this far. No going back now..",
     supplyWave: {
       sequence: ["bat", "slime", "slime", "bat", "slime"],
       interval: 1.15,
@@ -78,7 +78,7 @@ window.VENUS_LEVELS.level3 = {
     { x: 5795, y: 602 }, { x: 6075, y: 542 }, { x: 6355, y: 482 }, { x: 6640, y: 445 }, { x: 6745, y: 445 }
   ],
   signs: [
-    { x: 95, y: 668, text: "As above so below," },
+    { x: 95, y: 668, text: "[CAUTION: MONSTER SIGHTINGS REPORTED]" },
     { x: 3155, y: 668, text: "BEWARE! Monster Territory." }
   ],
   chests: [
