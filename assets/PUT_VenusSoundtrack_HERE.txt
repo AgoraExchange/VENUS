@@ -1,5 +1,0 @@
-Place your MP3 here and name it exactly:
-VenusSoundtrack.mp3
-
-The game will load it from:
-assets/VenusSoundtrack.mp3
